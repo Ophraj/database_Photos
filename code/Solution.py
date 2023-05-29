@@ -13,7 +13,7 @@ def createTables():
     try:
         conn = Connector.DBConnector()
 
-        # Create the tables in one transaction
+        # Create the tables in one transaction to create
         conn.execute("BEGIN;")
         create_query = f"""
             CREATE TABLE Photos ( 
