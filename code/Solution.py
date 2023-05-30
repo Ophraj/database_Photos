@@ -16,47 +16,61 @@ def createTables():
         # Create the tables in one transaction to create
         conn.execute("BEGIN;")
         create_query = f"""
-            CREATE TABLE Photos ( 
-            photo_id INTEGER,
-            desc TEXT NOT NULL,
-            size INTEGER NOT NULL,
-            PRIMARY KEY (photo_id),
-            UNIQUE (photo_id),
-            CHECK (photo_id > 0),
-            CHECK (size >= 0)
-        );   
-            CREATE TABLE Disks (
-            disk_id INTEGER,
-            company TEXT NOT NULL,
-            speed INTEGER NOT NULL,
-            free_space INTEGER NOT NULL,
-            cost INTEGER NOT NULL,
-            PRIMARY KEY (disk_id),
-            UNIQUE (disk_id),
-            CHECK (disk_id > 0),
-            CHECK (speed > 0),
-            CHECK (free_space >= 0),
-            CHECK (cost > 0)
-        ); 
-            CREATE TABLE RAMs (
-            ram_id INTEGER, 
-            size INTEGER NOT NULL,
-            company TEXT NOT NULL, 
-            PRIMARY KEY(ram_id),
-            UNIQUE(ram_id),
-            CHECK(ram_id>0),
-            CHECK(size>0)
-        ); 
-            CREATE VIEW Photos_Stored_On_Disks AS
-            SELECT *
-            FROM Photos INNER JOIN StoredOn
-            ON Photos.photo_id = StoredOn.photo_id;
-            
-            CREATE VIEW Rams_Part_Of_Disks AS
-            SELECT *
-            FROM RAMs INNER JOIN PartOf
-            ON RAMs.ram_id = PartOf.ram_id;
-        """
+                    CREATE TABLE Photos ( 
+                    photo_id INTEGER,
+                    description TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    PRIMARY KEY (photo_id),
+                    UNIQUE (photo_id),
+                    CHECK (photo_id > 0),
+                    CHECK (size >= 0)
+                );   
+                    CREATE TABLE Disks (
+                    disk_id INTEGER,
+                    company TEXT NOT NULL,
+                    speed INTEGER NOT NULL,
+                    free_space INTEGER NOT NULL,
+                    cost INTEGER NOT NULL,
+                    PRIMARY KEY (disk_id),
+                    UNIQUE (disk_id),
+                    CHECK (disk_id > 0),
+                    CHECK (speed > 0),
+                    CHECK (free_space >= 0),
+                    CHECK (cost > 0)
+                ); 
+                    CREATE TABLE RAMs (
+                    ram_id INTEGER, 
+                    size INTEGER NOT NULL,
+                    company TEXT NOT NULL, 
+                    PRIMARY KEY(ram_id),
+                    UNIQUE(ram_id),
+                    CHECK(ram_id>0),
+                    CHECK(size>0)
+                ); 
+                    CREATE TABLE StoredOn (
+                    photo_id INTEGER, 
+                    disk_id INTEGER,
+                    PRIMARY KEY(photo_id, disk_id),
+                    FOREIGN KEY(photo_id) REFERENCES Photos ON DELETE CASCADE ON UPDATE CASCADE,
+                    FOREIGN KEY(disk_id) REFERENCES Disks ON DELETE CASCADE ON UPDATE CASCADE
+                ); 
+                    CREATE TABLE PartOf(
+                    ram_id INTEGER, 
+                    disk_id INTEGER,
+                    PRIMARY KEY(ram_id, disk_id),
+                    FOREIGN KEY(ram_id ) REFERENCES RAMs ON DELETE CASCADE ON UPDATE CASCADE,
+                    FOREIGN KEY(disk_id) REFERENCES Disks ON DELETE CASCADE ON UPDATE CASCADE
+                ); 
+                CREATE VIEW Photos_Stored_On_Disks AS
+                    SELECT disk_id, StoredOn.photo_id, description, size 
+                    FROM Photos INNER JOIN StoredOn
+                    ON Photos.photo_id = StoredOn.photo_id;
+
+                    CREATE VIEW Rams_Part_Of_Disks AS
+                    SELECT disk_id, PartOf.ram_id, size, company
+                    FROM RAMs INNER JOIN PartOf
+                    ON RAMs.ram_id = PartOf.ram_id;
+                """
 
         conn.execute(create_query)
         conn.commit()
@@ -231,7 +245,7 @@ def addDisk(disk: Disk) -> ReturnValue:
     try:
         conn = Connector.DBConnector()
         conn.execute("BEGIN;")
-        query = sql.SQL("""INSERT INTO Disk VALUES({diskID}, {diskCompany}, 
+        query = sql.SQL("""INSERT INTO Disks VALUES({diskID}, {diskCompany}, 
                         {diskSpeed}, {diskFreeSpace}, {diskCost});"""). \
             format(diskID=sql.Literal(disk.getDiskID()),
                    diskCompany=sql.Literal(disk.getCompany()),
