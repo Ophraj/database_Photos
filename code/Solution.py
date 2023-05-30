@@ -82,7 +82,8 @@ def addPhoto(photo: Photo) -> ReturnValue:
     try:
         conn = Connector.DBConnector()
         conn.execute("BEGIN;")
-        query = sql.SQL("""INSERT INTO Photos VALUES({photoID}, {photoDescription}, {photoSize});""").\
+        query = sql.SQL("""INSERT INTO Photos VALUES({photoID}, 
+                        {photoDescription}, {photoSize});""").\
             format(photoID=sql.Literal(photo.getPhotoID()),
                    photoDescription=sql.Literal(photo.getDescription()),
                    photoSize=sql.Literal(photo.getSize()))
@@ -117,6 +118,7 @@ def addPhoto(photo: Photo) -> ReturnValue:
     finally:
         # will happen any way after try termination or exception handling
         conn.close()
+
     return ReturnValue.OK
 
 
@@ -125,6 +127,7 @@ def getPhotoByID(photoID: int) -> Photo:
     rows_effected, result = 0, Connector.ResultSet()
     try:
         conn = Connector.DBConnector()
+        conn.execute("BEGIN;")
         query = sql.SQL("SELECT * FROM Photos WHERE photo_id={photoID};").format(
             photoID=sql.Literal(photoID))
         rows_effected, result = conn.execute(query)
@@ -162,9 +165,14 @@ def getPhotoByID(photoID: int) -> Photo:
 
 def deletePhoto(photo: Photo) -> ReturnValue:
     conn = None
-    rows_effected, result = 0, Connector.ResultSet()
+
     try:
         conn = Connector.DBConnector()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM Photos")
+        initial_count = cursor.fetchone()[0]
+
+        conn.execute("BEGIN;")
         query = sql.SQL("""UPDATE Disks
                     SET free_space = free_space - {photoSize}
                     WHERE disk_id IN (SELECT disk_id
@@ -173,11 +181,19 @@ def deletePhoto(photo: Photo) -> ReturnValue:
                     DELETE
                     FROM Photos
                     WHERE photo_id = {photoID}};
-                    """).format(photoID=sql.Literal(Photo.getPhotoID()),
-                                photoSize=sql.Literal(Photo.getSize()))
+                    """).format(photoID=sql.Literal(photo.getPhotoID()),
+                                photoSize=sql.Literal(photo.getSize()))
 
         conn.execute(query)
         conn.commit()
+        # TODO: check if the return value are in right order (ok and then error)
+        cursor.execute("SELECT COUNT(*) FROM Photos")
+        final_count = cursor.fetchone()[0]
+        deleted_photos = initial_count - final_count
+
+        if deleted_photos != 1:
+            conn.rollback()
+            return ReturnValue.OK
 
     except DatabaseException.CHECK_VIOLATION as e:
         conn.rollback()
@@ -186,8 +202,7 @@ def deletePhoto(photo: Photo) -> ReturnValue:
     except DatabaseException.UNIQUE_VIOLATION as e:
         conn.rollback()
         print(e)
-        return ReturnValue.OK
-    # TODO:check if unique violation corresponds to an error DOESNT EXIST (return OK)
+        return ReturnValue.ERROR
     except DatabaseException.ConnectionInvalid as e:
         conn.rollback()
         print(e)
@@ -207,7 +222,8 @@ def deletePhoto(photo: Photo) -> ReturnValue:
     finally:
         # will happen any way after try termination or exception handling
         conn.close()
-        return ReturnValue.OK
+
+    return ReturnValue.OK
 
 
 def addDisk(disk: Disk) -> ReturnValue:
@@ -253,6 +269,7 @@ def addDisk(disk: Disk) -> ReturnValue:
     finally:
         # will happen any way after try termination or exception handling
         conn.close()
+
     return ReturnValue.OK
 
 
@@ -261,6 +278,7 @@ def getDiskByID(diskID: int) -> Disk:
     rows_effected, result = 0, Connector.ResultSet()
     try:
         conn = Connector.DBConnector()
+        conn.execute("BEGIN;")
         query = sql.SQL("SELECT * FROM Disks WHERE disk_id={diskID};").format(
             diskID=sql.Literal(diskID))
         rows_effected, result = conn.execute(query)
@@ -301,13 +319,18 @@ def deleteDisk(diskID: int) -> ReturnValue:
     rows_effected, result = 0, Connector.ResultSet()
     try:
         conn = Connector.DBConnector()
+
+        conn.execute("BEGIN;")
         query = sql.SQL("""DELETE
                         FROM Disks
                         WHERE disk_id = {disk_ID};
                         """).format(disk_ID=sql.Literal(diskID))
 
-        conn.execute(query)
+        rows_effected, result = conn.execute(query)
         conn.commit()
+        if rows_effected != 1:
+            conn.rollback()
+            return ReturnValue.NOT_EXISTS
 
     except DatabaseException.CHECK_VIOLATION as e:
         conn.rollback()
@@ -316,7 +339,7 @@ def deleteDisk(diskID: int) -> ReturnValue:
     except DatabaseException.UNIQUE_VIOLATION as e:
         conn.rollback()
         print(e)
-        return ReturnValue.NOT_EXISTS
+        return ReturnValue.ERROR
     except DatabaseException.ConnectionInvalid as e:
         conn.rollback()
         print(e)
@@ -336,7 +359,8 @@ def deleteDisk(diskID: int) -> ReturnValue:
     finally:
         # will happen any way after try termination or exception handling
         conn.close()
-        return ReturnValue.OK
+
+    return ReturnValue.OK
 
 
 def addRAM(ram: RAM) -> ReturnValue:
@@ -379,18 +403,150 @@ def addRAM(ram: RAM) -> ReturnValue:
     finally:
         # will happen any way after try termination or exception handling
         conn.close()
+
     return ReturnValue.OK
 
 
 def getRAMByID(ramID: int) -> RAM:
-    return RAM()
+    conn = None
+    rows_effected, result = 0, Connector.ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        conn.execute("BEGIN;")
+        query = sql.SQL("SELECT * FROM RAMs WHERE ram_id={RamId};").format(
+            RamId=sql.Literal(ramID))
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return RAM.badRAM()
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return RAM.badRAM()
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return RAM.badRAM()
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return RAM.badRAM()
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return RAM.badRAM()
+    except Exception as e:
+        print(e)
+        return RAM.badRAM()
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
+    if rows_effected == 0:
+        return RAM.badRAM()
+    else:
+        ram_entry = result.rows[0]
+        print(ram_entry)
+        return RAM(ram_entry[0], ram_entry[1], ram_entry[2])
 
 
 def deleteRAM(ramID: int) -> ReturnValue:
+    conn = None
+    rows_effected, result = 0, Connector.ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        conn.execute("BEGIN;")
+        query = sql.SQL("""DELETE
+                            FROM RAMs
+                            WHERE ram_id = {RamID};
+                            """).format(RamID=sql.Literal(ramID))
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.ConnectionInvalid as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    finally:
+        # will happen any way after try termination or exception handling
+        if rows_effected != 1:
+            conn.rollback()
+            return ReturnValue.NOT_EXISTS
+
+        conn.close()
+
     return ReturnValue.OK
 
 
 def addDiskAndPhoto(disk: Disk, photo: Photo) -> ReturnValue:
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        conn.execute("BEGIN;")
+        query = sql.SQL("""INSERT INTO Photos VALUES({photoID}, 
+                                {photoDescription}, {photoSize});
+                            INSERT INTO Disk VALUES({diskID}, {diskCompany}, 
+                                {diskSpeed}, {diskFreeSpace}, {diskCost});
+                            """).\
+            format(photoID=sql.Literal(photo.getPhotoID()),
+                   photoDescription=sql.Literal(photo.getDescription()),
+                   photoSize=sql.Literal(photo.getSize()),
+                   diskID=sql.Literal(disk.getDiskID()),
+                   diskCompany=sql.Literal(disk.getCompany()),
+                   diskSpeed=sql.Literal(disk.getSpeed()),
+                   diskFreeSpace=sql.Literal(disk.getFreeSpace()),
+                   diskCost=sql.Literal(disk.getCost()))
+
+        conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        conn.rollback()
+        return ReturnValue.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ALREADY_EXISTS
+    except DatabaseException.ConnectionInvalid as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
     return ReturnValue.OK
 
 
