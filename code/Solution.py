@@ -333,7 +333,6 @@ def deleteDisk(diskID: int) -> ReturnValue:
     rows_effected, result = 0, Connector.ResultSet()
     try:
         conn = Connector.DBConnector()
-
         conn.execute("BEGIN;")
         query = sql.SQL("""DELETE
                         FROM Disks
