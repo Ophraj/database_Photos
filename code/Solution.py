@@ -84,10 +84,55 @@ def createTables():
 
 
 def clearTables():
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+
+        # Create the tables in one transaction to create
+        create_query = f"""
+                                DELETE FROM Photos CASCADE;   
+                                DELETE FROM Disks CASCADE;
+                                DELETE FROM RAMs CASCADE;
+                                """
+
+        conn.execute(create_query)
+        conn.commit()
+        # Commit if all the queries succeeded
+    except Exception as e:
+        conn.rollback()
+        # Roll back if one of the query failed
+        print(e)
+    finally:
+        conn.close()
     pass
 
 
 def dropTables():
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+
+        # Create the tables in one transaction to create
+        conn.execute("BEGIN;")
+        create_query = f"""
+                            DROP TABLE IF EXISTS Photos CASCADE;   
+                            DROP TABLE IF EXISTS Disks CASCADE;
+                            DROP TABLE IF EXISTS RAMs CASCADE;
+                            DROP TABLE IF EXISTS StoredOn CASCADE;
+                            DROP TABLE IF EXISTS PartOf CASCADE;
+                            DROP VIEW IF EXISTS Photos_Stored_On_Disks;
+                            DROP VIEW IF EXISTS Rams_Part_Of_Disks;
+                            """
+
+        conn.execute(create_query)
+        conn.commit()
+        # Commit if all the queries succeeded
+    except Exception as e:
+        conn.rollback()
+        # Roll back if one of the query failed
+        print(e)
+    finally:
+        conn.close()
     pass
 
 
