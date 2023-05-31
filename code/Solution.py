@@ -609,6 +609,55 @@ def addDiskAndPhoto(disk: Disk, photo: Photo) -> ReturnValue:
 
 
 def addPhotoToDisk(photo: Photo, diskID: int) -> ReturnValue:
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""
+                        BEGIN TRANSACTION; 
+                        UPDATE Disks 
+                        SET free_space = free_space - {photoSize} 
+                        WHERE disk_id={diskID};
+
+                        INSERT INTO StoredOn 
+                        VALUES ({photoID}, {diskID});
+
+                        COMMIT;
+                        """).format(photoID=sql.Literal(photo.getPhotoID()),
+                                   photoSize=sql.Literal(photo.getSize()),
+                                   diskID=sql.Literal(diskID),
+                                   )
+
+        conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.NOT_EXISTS
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        conn.rollback()
+        return ReturnValue.BAD_PARAMS
+    except DatabaseException.ConnectionInvalid as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        return ReturnValue.ERROR
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
     return ReturnValue.OK
 
 
