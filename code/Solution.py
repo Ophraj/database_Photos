@@ -1010,23 +1010,208 @@ def getPhotosCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
 
 
 def isCompanyExclusive(diskID: int) -> bool:
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""
+                        SELECT company 
+                        FROM Disks
+                        WHERE disk_id = {DiskID} AND company = ALL(SELECT company FROM Rams_Part_Of_Disks WHERE disk_id={DiskID})
+                        """).format(DiskID=sql.Literal(diskID))
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return False
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return False
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return False
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return False
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return False
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
+    if result.isEmpty():
+        return False
+
     return True
 
 
 def isDiskContainingAtLeastNumExists(description : str, num : int) -> bool:
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""
+                            SELECT disk_id 
+                            FROM Photos_Stored_On_Disks 
+                            WHERE description ={description} 
+                            GROUP BY disk_id 
+                            HAVING COUNT(*)>= {num};
+                            """).format(description=sql.Literal(description), num=sql.Literal(num))
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return False
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return False
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return False
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return False
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return False
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
+    if result.isEmpty():
+        return False
+
     return True
 
 
 def getDisksContainingTheMostData() -> List[int]:
-    return []
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""
+                        SELECT d.disk_id, SUM(pd.size) as amount_data
+                        FROM Photos_Stored_On_Disks pd RIGHT OUTER JOIN Disks d ON pd.disk_id = d.disk_id
+                        GROUP BY d.disk_id
+                        ORDER BY amount_data DESC, d.disk_id ASC
+                        LIMIT 5;
+                        """)
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return []
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return []
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
+    disk_ids = [row[0] for row in result.rows]
+    return disk_ids
 
 
 def getConflictingDisks() -> List[int]:
-    return []
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""
+                            SELECT DISTINCT so1.disk_id
+                            FROM StoredOn so1 JOIN StoredOn so2 ON so1.photo_id = so2.photo_id AND so1.disk_id <> so2.disk_id
+                            ORDER BY disk_id ASC;
+                            """)
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return []
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return []
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
+    disk_ids = [row[0] for row in result.rows]
+    return disk_ids
 
 
 def mostAvailableDisks() -> List[int]:
-    return []
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""
+                                SELECT d.disk_id, d.speed, COUNT(*) as num_photos
+                                FROM Photos_Stored_On_Disks pd RIGHT OUTER JOIN Disks d ON pd.disk_id = d.disk_id
+                                GROUP BY d.disk_id
+                                ORDER BY num_photos DESC, d.speed DESC, d.disk_id ASC
+                                LIMIT 5;
+                                """)
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return []
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return []
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+
+    disk_ids = [row[0] for row in result.rows]
+    return disk_ids
 
 
 def getClosePhotos(photoID: int) -> List[int]:
