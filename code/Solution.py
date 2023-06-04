@@ -939,7 +939,7 @@ def getPhotosCanBeAddedToDisk(diskID: int) -> List[int]:
             ORDER BY photo_id DESC
             LIMIT 5
             """).format(DiskID=sql.Literal(diskID))
-        rows_effected, result = conn.execute(query)
+        rows_selected, result = conn.execute(query)
         conn.commit()
 
     except DatabaseException.CHECK_VIOLATION as e:
@@ -972,7 +972,8 @@ def getPhotosCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
     conn = None
     try:
         conn = Connector.DBConnector()
-        query = sql.SQL("""SELECT photo_id
+        query = sql.SQL("""BEGIN;
+                            SELECT photo_id
                             FROM Photos,
                             (SELECT free_space FROM Disks WHERE Disks.disk_id={DiskID}) AS Free_Space,
                             (SELECT SUM(size) as sum_ram FROM Rams_Part_Of_Disks WHERE Rams_Part_Of_Disks.disk_id={DiskID}) AS Sum_RAMs
@@ -980,7 +981,7 @@ def getPhotosCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
                             ORDER by photo_id ASC
                             LIMIT 5;""").format(DiskID=sql.Literal(diskID))
 
-        rows_effected, result = conn.execute(query)
+        rows_selected, result = conn.execute(query)
         conn.commit()
 
     except DatabaseException.CHECK_VIOLATION as e:
@@ -1215,4 +1216,42 @@ def mostAvailableDisks() -> List[int]:
 
 
 def getClosePhotos(photoID: int) -> List[int]:
-    return []
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        query = sql.SQL("""SELECT so2.photo_id
+                        FROM StoredOn so1
+                        JOIN StoredOn so2 ON so1.disk_id = so2.disk_id
+                        WHERE (so1.photo_id = {PhotoID} OR so2.photo_id = {PhotoID} OR {PhotoID} NOT IN (SELECT photo_id FROM StoredOn))
+                        GROUP BY so2.photo_id
+                        HAVING COUNT(so2.disk_id) >= 0.5 * (SELECT COUNT(disk_id) FROM StoredOn WHERE photo_id = {PhotoID})
+                        ORDER BY so2.photo_id ASC
+                        LIMIT 10;
+                         """).format(PhotoID=sql.Literal(photoID))
+
+        rows_effected, result = conn.execute(query)
+        conn.commit()
+
+    except DatabaseException.CHECK_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.ConnectionInvalid as e:
+        print(e)
+        return []
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        print(e)
+        return []
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        print(e)
+        return []
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        # will happen any way after try termination or exception handling
+        conn.close()
+    close_photos = [row[0] for row in result.rows]
+    return close_photos
