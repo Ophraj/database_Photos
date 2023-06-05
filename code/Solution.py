@@ -962,7 +962,7 @@ def getPhotosCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
                         SELECT photo_id
                         FROM Photos, (SELECT free_space FROM Disks WHERE Disks.disk_id={DiskID}) AS Free_Space,
                         (SELECT SUM(size) as sum_ram FROM Rams_Part_Of_Disks WHERE Rams_Part_Of_Disks.disk_id={DiskID}) AS Sum_RAMs
-                        WHERE size<= Free_Space.free_space AND ((Sum_RAMs.sum_ram IS NOT NULL AND size <= Sum_RAMs.sum_ram) OR Sum_RAMs.sum_ram IS NULL)
+                        WHERE size<= Free_Space.free_space AND ((Sum_RAMs.sum_ram IS NOT NULL AND size <= Sum_RAMs.sum_ram) OR (Sum_RAMs.sum_ram IS NULL AND size = 0))
                         ORDER by photo_id ASC
                         LIMIT 5;
                         """).format(DiskID=sql.Literal(diskID))
@@ -1165,14 +1165,24 @@ def mostAvailableDisks() -> List[int]:
     try:
         conn = Connector.DBConnector()
         query = sql.SQL("""
-                        SELECT D.disk_id, D.speed, COUNT(*) AS num_photos
+                        SELECT d.disk_id, COUNT(bd.d_id)
+                        FROM Disks d 
+                        LEFT OUTER JOIN (SELECT D.disk_id as d_id, D.speed as d_speed
                         FROM Photos P, Disks D
-                        WHERE P.size <= D.free_space
-                        GROUP BY D.disk_id
-                        ORDER BY num_photos DESC, D.speed DESC, D.disk_id ASC
+                        WHERE P.size <= D.free_space) bd
+                        ON d.disk_id = bd.d_id
+                        GROUP BY d.disk_id
+                        ORDER BY COUNT(bd.d_id) DESC, d.speed DESC, d.disk_id ASC
                         LIMIT 5;
                         """)
-
+        """
+                                SELECT D.disk_id, D.speed, COUNT(*) AS num_photos
+                                FROM Photos P, Disks D
+                                WHERE P.size <= D.free_space
+                                GROUP BY D.disk_id
+                                ORDER BY num_photos DESC, D.speed DESC, D.disk_id ASC
+                                LIMIT 5;
+                                """
         rows_effected, result = conn.execute(query)
         conn.commit()
 
@@ -1206,17 +1216,42 @@ def getClosePhotos(photoID: int) -> List[int]:
     conn = None
     try:
         conn = Connector.DBConnector()
+        """
+        SELECT so2.photo_id,
+        FROM
+        StoredOn so1 INNER JOIN StoredOn so2 ON so1.photo_id = photoID AND so2.photo_id <> photoID AND so1.disk_id = so2.disk_id
+        RIGHT OUTER JOIN Photos p ON p.photo_id <> photoID AND p.photo_id = so2.photo_id,
+        (SELECT COUNT(disk_id) as num_disks FROM StoredOn WHERE photo_id = photoID) AS NUM_DISKS_STORING_PHOTOID
+        GROUP BY so2.photo_id 
+        HAVING COUNT(so2.disk_id) >= 0.5 * NUM_DISKS_STORING_PHOTOID.num_disks
+        ORDER BY so2.photo_id ASC
+        LIMIT 10
+        """
+
         query = sql.SQL("""
-                        SELECT so2.photo_id
-                        FROM StoredOn so1
-                        JOIN StoredOn so2 ON so1.disk_id = so2.disk_id
-                        WHERE (so1.photo_id = {PhotoID} OR so2.photo_id = {PhotoID} OR {PhotoID} NOT IN (SELECT photo_id FROM StoredOn))
-                        GROUP BY so2.photo_id
-                        HAVING COUNT(so2.disk_id) >= 0.5 * (SELECT COUNT(disk_id) FROM StoredOn WHERE photo_id = {PhotoID})
-                        ORDER BY so2.photo_id ASC
+                        SELECT p.photo_id, COUNT(s2_id)
+                        FROM
+                        (SELECT s1.photo_id as s1_id, s2.photo_id as s2_id, s1.disk_id as disk_id
+                        FROM StoredOn s1 
+                        INNER JOIN StoredOn s2 ON s1.disk_id = s2.disk_id
+                        WHERE s1.photo_id = {PhotoID} AND s2.photo_id <> {PhotoID}) sd
+                        RIGHT OUTER JOIN Photos p ON sd.s2_id = p.photo_id
+                        WHERE p.photo_id <> {PhotoID}
+                        GROUP BY p.photo_id
+                        HAVING COUNT(s2_id) >= 0.5*(SELECT COUNT(disk_id) FROM StoredOn WHERE photo_id = {PhotoID})
+                        ORDER BY p.photo_id ASC
                         LIMIT 10;
                         """).format(PhotoID=sql.Literal(photoID))
-
+        """
+                                SELECT so2.photo_id
+                                FROM StoredOn so1
+                                JOIN StoredOn so2 ON so1.disk_id = so2.disk_id
+                                WHERE (so1.photo_id = {PhotoID} OR so2.photo_id = {PhotoID} OR {PhotoID} NOT IN (SELECT photo_id FROM StoredOn))
+                                GROUP BY so2.photo_id
+                                HAVING COUNT(so2.disk_id) >= 0.5 * (SELECT COUNT(disk_id) FROM StoredOn WHERE photo_id = {PhotoID})
+                                ORDER BY so2.photo_id ASC
+                                LIMIT 10;
+                                """
         rows_effected, result = conn.execute(query)
         conn.commit()
 
