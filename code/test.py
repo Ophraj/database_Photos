@@ -16,9 +16,9 @@ if __name__ == '__main__':
     print("0. Creating all tables")
     Solution.createTables()
 
-    photo1 = Photo(1, "Tree", 10)
-    photo2 = Photo(2, "Tree", 100)
-    photo3 = Photo(3, "Tree", 100)
+    photos = [Photo(i, "Tree", i*10) for i in range(1, 10)]
+    disks = [Disk(1,"MC", 23, 345, 12) for i in range(1, 10)]
+
     disk1 = Disk(1,"MC", 23, 345, 12)
     disk2 = Disk(2, "MC", 23, 345, 12)
     ram1 = RAM(1,"MC", 30)
@@ -122,5 +122,6 @@ if __name__ == '__main__':
     print("33. Get most")
     disk_ids = Solution.getConflictingDisks()
     print(disk_ids)
-    print("FINALLY: Clearing tables")
+    print("FINALLY: Clearing and droping tables")
     Solution.clearTables()
+    Solution.dropTables()
