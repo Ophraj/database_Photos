@@ -1085,7 +1085,7 @@ def getDisksContainingTheMostData() -> List[int]:
     try:
         conn = Connector.DBConnector()
         query = sql.SQL("""
-                        SELECT d.disk_id, SUM(pd.size) as amount_data
+                        SELECT d.disk_id, COALESCE(SUM(pd.size), 0) as amount_data
                         FROM Photos_Stored_On_Disks pd RIGHT OUTER JOIN Disks d ON pd.disk_id = d.disk_id
                         GROUP BY d.disk_id
                         ORDER BY amount_data DESC, d.disk_id ASC
