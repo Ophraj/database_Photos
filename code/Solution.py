@@ -243,7 +243,6 @@ def deletePhoto(photo: Photo) -> ReturnValue:
 
         rows_effected, result = conn.execute(query)
         conn.commit()
-        # TODO: check if the return value are in right order (ok in case of 'not exist' and error else)
 
     except DatabaseException.CHECK_VIOLATION as e:
         conn.rollback()
@@ -793,7 +792,7 @@ def averagePhotosSizeOnDisk(diskID: int) -> float:
     try:
         conn = Connector.DBConnector()
         query = sql.SQL("""
-                        SELECT AVG(size) 
+                        SELECT COALESCE(AVG(size), 0)
                         FROM Photos_Stored_On_Disks
                         WHERE disk_id = {diskID}
                         """).format(diskID=sql.Literal(diskID))
@@ -824,7 +823,7 @@ def averagePhotosSizeOnDisk(diskID: int) -> float:
 
     average_entry = result.rows[0]
     average_result = average_entry[0]
-    if result.isEmpty() or average_result is None:
+    if result.isEmpty():
         return 0
 
     return average_result
@@ -835,7 +834,7 @@ def getTotalRamOnDisk(diskID: int) -> int:
     try:
         conn = Connector.DBConnector()
         query = sql.SQL("""
-                            SELECT SUM(size) 
+                            SELECT COALESCE(SUM(size), 0)
                             FROM Rams_Part_Of_Disks
                             WHERE disk_id = {diskID};
                             """).format(diskID=sql.Literal(diskID))
@@ -866,7 +865,7 @@ def getTotalRamOnDisk(diskID: int) -> int:
 
     total_entry = result.rows[0]
     total_result = total_entry[0]
-    if result.isEmpty() or total_result is None:
+    if result.isEmpty():
         return 0
 
     return total_result
@@ -877,7 +876,7 @@ def getCostForDescription(description: str) -> int:
     try:
         conn = Connector.DBConnector()
         query = sql.SQL("""
-                                SELECT SUM(cost*size) 
+                                SELECT COALESCE(SUM(cost*size), 0)
                                 FROM Photos_Stored_On_Disks pd INNER JOIN Disks d ON pd.disk_id = d.disk_id
                                 WHERE description = {description};
                                 """).format(description=sql.Literal(description))
@@ -908,7 +907,7 @@ def getCostForDescription(description: str) -> int:
 
     entry = result.rows[0]
     entry_result = entry[0]
-    if result.isEmpty() or entry_result is None:
+    if result.isEmpty():
         return 0
 
     return entry_result
@@ -1175,14 +1174,7 @@ def mostAvailableDisks() -> List[int]:
                         ORDER BY COUNT(bd.d_id) DESC, d.speed DESC, d.disk_id ASC
                         LIMIT 5;
                         """)
-        """
-                                SELECT D.disk_id, D.speed, COUNT(*) AS num_photos
-                                FROM Photos P, Disks D
-                                WHERE P.size <= D.free_space
-                                GROUP BY D.disk_id
-                                ORDER BY num_photos DESC, D.speed DESC, D.disk_id ASC
-                                LIMIT 5;
-                                """
+
         rows_effected, result = conn.execute(query)
         conn.commit()
 
@@ -1216,17 +1208,6 @@ def getClosePhotos(photoID: int) -> List[int]:
     conn = None
     try:
         conn = Connector.DBConnector()
-        """
-        SELECT so2.photo_id,
-        FROM
-        StoredOn so1 INNER JOIN StoredOn so2 ON so1.photo_id = photoID AND so2.photo_id <> photoID AND so1.disk_id = so2.disk_id
-        RIGHT OUTER JOIN Photos p ON p.photo_id <> photoID AND p.photo_id = so2.photo_id,
-        (SELECT COUNT(disk_id) as num_disks FROM StoredOn WHERE photo_id = photoID) AS NUM_DISKS_STORING_PHOTOID
-        GROUP BY so2.photo_id 
-        HAVING COUNT(so2.disk_id) >= 0.5 * NUM_DISKS_STORING_PHOTOID.num_disks
-        ORDER BY so2.photo_id ASC
-        LIMIT 10
-        """
 
         query = sql.SQL("""
                         SELECT p.photo_id, COUNT(s2_id)
@@ -1242,16 +1223,7 @@ def getClosePhotos(photoID: int) -> List[int]:
                         ORDER BY p.photo_id ASC
                         LIMIT 10;
                         """).format(PhotoID=sql.Literal(photoID))
-        """
-                                SELECT so2.photo_id
-                                FROM StoredOn so1
-                                JOIN StoredOn so2 ON so1.disk_id = so2.disk_id
-                                WHERE (so1.photo_id = {PhotoID} OR so2.photo_id = {PhotoID} OR {PhotoID} NOT IN (SELECT photo_id FROM StoredOn))
-                                GROUP BY so2.photo_id
-                                HAVING COUNT(so2.disk_id) >= 0.5 * (SELECT COUNT(disk_id) FROM StoredOn WHERE photo_id = {PhotoID})
-                                ORDER BY so2.photo_id ASC
-                                LIMIT 10;
-                                """
+
         rows_effected, result = conn.execute(query)
         conn.commit()
 
